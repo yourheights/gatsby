@@ -295,6 +295,8 @@ export async function sourceNodes(
   )
   existingNodes.forEach(n => touchNode(n))
 
+  // console.log("existingNodes", existingNodes.length)
+
   reporter.verbose(`Building Contentful reference map`)
 
   // Create map of resolvable ids so we can check links against them while creating
@@ -303,7 +305,10 @@ export async function sourceNodes(
     existingNodes,
     entryList,
     assets,
+    space,
   })
+
+  // console.log({ resolvable })
 
   // Build foreign reference map before starting to insert any nodes
   const foreignReferenceMap = buildForeignReferenceMap({
@@ -320,7 +325,7 @@ export async function sourceNodes(
   const newOrUpdatedEntries = new Set()
   entryList.forEach(entries => {
     entries.forEach(entry => {
-      newOrUpdatedEntries.add(generateReferenceId(entry))
+      newOrUpdatedEntries.add(generateReferenceId(space, entry))
     })
   })
 
@@ -328,24 +333,40 @@ export async function sourceNodes(
   // links added.
   existingNodes
     .filter(
-      n => n?.sys?.type && newOrUpdatedEntries.has(generateReferenceId(n))
+      n =>
+        n?.sys?.type && newOrUpdatedEntries.has(generateReferenceId(space, n))
     )
     .forEach(n => {
-      const id = generateReferenceId(n)
+      const id = generateReferenceId(space, n)
+
       if (foreignReferenceMap[id]) {
-        foreignReferenceMap[id].forEach(foreignReference => {
-          // Add reverse links
-          if (n[foreignReference.name]) {
-            n[foreignReference.name].push(foreignReference.id)
-            // It might already be there so we'll uniquify after pushing.
-            n[foreignReference.name] = _.uniq(n[foreignReference.name])
-          } else {
+        foreignReferenceMap[id].forEach(({ name, node, space }) => {
+          const referenceId = generateReferenceId(space, node)
+          if (!n[name]) {
             // If is one foreign reference, there can always be many.
             // Best to be safe and put it in an array to start with.
-            n[foreignReference.name] = [foreignReference.id]
+            n[name] = [generateReferenceId(space, node)]
+            return
+          }
+          // Add reverse links
+          if (n[name] && !n[name].includes(referenceId)) {
+            n[name].push(referenceId)
+            // console.log({
+            //   generatedId: id,
+            //   name: name,
+            //   nodeVal: n[name],
+            // })
+            // It might already be there so we'll uniquify after pushing.
+            // n[name] = _.uniq(n[name])
           }
         })
       }
+      console.log("existing node", {
+        n,
+        id,
+        mapRes: foreignReferenceMap[id],
+        foreignReferenceMap,
+      })
     })
 
   function deleteContentfulNode(node) {
