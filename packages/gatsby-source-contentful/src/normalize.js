@@ -34,14 +34,15 @@ const makeGetLocalizedField =
   field =>
     getLocalizedField({ field, locale, localesFallback })
 
-export const makeId = (space, nodeOrLink) => {
+export const makeId = (space, nodeOrLink, locale) => {
+  // console.log("makeId", { space, nodeOrLink })
   const type = nodeOrLink.sys.linkType || nodeOrLink.sys.type
+
+  // Sync API: Map deleted types to their actual type name
   const normalizedType = type.startsWith(`Deleted`)
     ? type.substring(`Deleted`.length)
     : type
-  return currentLocale === defaultLocale
-    ? `${spaceId}___${id}___${normalizedType}`
-    : `${spaceId}___${id}___${normalizedType}___${currentLocale}`
+  return `${space.sys.id}___${nodeOrLink.sys.id}___${normalizedType}___${locale}`
 }
 
 // export const makeId = ({ spaceId, id, currentLocale, defaultLocale, type }) => {
@@ -85,22 +86,29 @@ export const buildResolvableSet = ({
   existingNodes = [],
   assets = [],
   space,
+  locales,
 }) => {
   const resolvable = new Set()
   existingNodes.forEach(node => {
     if (node.internal.owner === `gatsby-source-contentful` && node?.sys?.id) {
       // We need to add only root level resolvable (assets and entries)
       // Derived nodes (markdown or JSON) will be recreated if needed.
-      resolvable.add(generateReferenceId(space, node))
+      resolvable.add(makeId(space, node, node.sys.locale))
     }
   })
 
   entryList.forEach(entries => {
-    entries.forEach(entry => resolvable.add(generateReferenceId(space, entry)))
+    entries.forEach(entry => {
+      locales.forEach(locale => {
+        resolvable.add(makeId(space, entry, locale))
+      })
+    })
   })
 
   assets.forEach(assetItem =>
-    resolvable.add(generateReferenceId(space, assetItem))
+    locales.forEach(locale => {
+      resolvable.add(makeId(space, assetItem, locale))
+    })
   )
 
   return resolvable
@@ -142,7 +150,8 @@ export const buildForeignReferenceMap = ({
               entryItemFieldValue[0].sys.id
             ) {
               entryItemFieldValue.forEach(v => {
-                const key = generateReferenceId(space, v)
+                // @makeid
+                const key = makeId(space, v)
                 // Don't create link to an unresolvable field.
                 if (!resolvable.has(key)) {
                   return
@@ -162,7 +171,8 @@ export const buildForeignReferenceMap = ({
             entryItemFieldValue?.sys?.type &&
             entryItemFieldValue.sys.id
           ) {
-            const key = generateReferenceId(space, entryItemFieldValue)
+            // @makeid
+            const key = makeId(space, entryItemFieldValue)
             // Don't create link to an unresolvable field.
             if (!resolvable.has(key)) {
               return
@@ -311,11 +321,11 @@ export const createNodesForContentType = ({
   const createNodePromises = []
   locales.forEach(locale => {
     const localesFallback = buildFallbackChain(locales)
-    const mId = makeMakeId({
-      currentLocale: locale.code,
-      defaultLocale,
-      createNodeId,
-    })
+    // const mId = makeMakeId({
+    //   currentLocale: locale.code,
+    //   defaultLocale,
+    //   createNodeId,
+    // })
     const getField = makeGetLocalizedField({
       locale,
       localesFallback,
@@ -338,11 +348,12 @@ export const createNodesForContentType = ({
     // First create nodes for each of the entries of that content type
     const entryNodes = entries
       .map(entryItem => {
-        const entryNodeId = mId(
-          space.sys.id,
-          entryItem.sys.id,
-          entryItem.sys.type
-        )
+        // const entryNodeId = mId(
+        //   space.sys.id,
+        //   entryItem.sys.id,
+        //   entryItem.sys.type
+        // )
+        const entryNodeId = makeId(space, entryItem, locale)
 
         const existingNode = getNode(entryNodeId)
         if (existingNode?.internal?.contentDigest === entryItem.sys.updatedAt) {
@@ -387,14 +398,15 @@ export const createNodesForContentType = ({
                 // creating an empty node field in case when original key field value
                 // is empty due to links to missing entities
                 const resolvableEntryItemFieldValue = entryItemFieldValue
-                  .filter(v => resolvable.has(generateReferenceId(space, v)))
-                  .map(function (v) {
-                    return mId(
-                      space.sys.id,
-                      v.sys.id,
-                      v.sys.linkType || v.sys.type
-                    )
-                  })
+                  .filter(v => resolvable.has(makeId(space, v, locale)))
+                  // .map(function (v) {
+                  //   return mId(
+                  //     space.sys.id,
+                  //     v.sys.id,
+                  //     v.sys.linkType || v.sys.type
+                  //   )
+                  // })
+                  .map(v => makeId(space, v, locale))
                 if (resolvableEntryItemFieldValue.length !== 0) {
                   entryItemFields[`${entryItemFieldKey}___NODE`] =
                     resolvableEntryItemFieldValue
@@ -408,14 +420,16 @@ export const createNodesForContentType = ({
               entryItemFieldValue.sys.type &&
               entryItemFieldValue.sys.id
             ) {
-              if (
-                resolvable.has(generateReferenceId(space, entryItemFieldValue))
-              ) {
-                entryItemFields[`${entryItemFieldKey}___NODE`] = mId(
-                  space.sys.id,
-                  entryItemFieldValue.sys.id,
-                  entryItemFieldValue.sys.linkType ||
-                    entryItemFieldValue.sys.type
+              if (resolvable.has(makeId(space, entryItemFieldValue, locale))) {
+                // entryItemFields[`${entryItemFieldKey}___NODE`] = mId(
+                //   space.sys.id,
+                //   entryItemFieldValue.sys.id,
+                //   entryItemFieldValue.sys.linkType ||
+                //     entryItemFieldValue.sys.type
+                // )
+                entryItemFields[`${entryItemFieldKey}___NODE`] = makeId(
+                  space,
+                  entryItemFieldValue
                 )
               }
               delete entryItemFields[entryItemFieldKey]
@@ -425,7 +439,7 @@ export const createNodesForContentType = ({
 
         // Add reverse linkages if there are any for this node
         const foreignReferences =
-          foreignReferenceMap[generateReferenceId(space, entryItem)]
+          foreignReferenceMap[makeId(space, entryItem, locale)]
         if (foreignReferences) {
           foreignReferences.forEach(({ name, node, space }) => {
             const existingReference = entryItemFields[name]
@@ -434,12 +448,12 @@ export const createNodesForContentType = ({
               // many-to-one reference which has already been recorded, so we can
               // skip it. However, if it is an array, add it:
               if (Array.isArray(existingReference)) {
-                entryItemFields[name].push(generateReferenceId(space, node))
+                entryItemFields[name].push(makeId(space, node, locale))
               }
             } else {
               // If there is one foreign reference, there can be many.
               // Best to be safe and put it in an array to start with.
-              entryItemFields[name] = [generateReferenceId(space, node)]
+              entryItemFields[name] = [makeId(space, node, locale)]
             }
           })
         }
@@ -582,11 +596,11 @@ export const createAssetNodes = ({
   const createNodePromises = []
   locales.forEach(locale => {
     const localesFallback = buildFallbackChain(locales)
-    const mId = makeMakeId({
-      currentLocale: locale.code,
-      defaultLocale,
-      createNodeId,
-    })
+    // const mId = makeMakeId({
+    //   currentLocale: locale.code,
+    //   defaultLocale,
+    //   createNodeId,
+    // })
     const getField = makeGetLocalizedField({
       locale,
       localesFallback,
@@ -595,7 +609,8 @@ export const createAssetNodes = ({
     const file = getField(assetItem.fields.file)
 
     const assetNode = {
-      id: mId(space.sys.id, assetItem.sys.id, assetItem.sys.type),
+      // id: mId(space.sys.id, assetItem.sys.id, assetItem.sys.type),
+      id: makeId(space, assetItem, locale.code),
       parent: null,
       children: [],
       internal: {

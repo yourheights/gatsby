@@ -44,6 +44,7 @@ describe(`Process contentful data (by name)`, () => {
       assets: currentSyncData.assets,
       entryList,
       space,
+      locales,
     })
     expect(resolvable).toMatchSnapshot()
   })
@@ -119,6 +120,7 @@ describe(`Skip existing nodes in warm build`, () => {
       assets: currentSyncData.assets,
       entryList,
       space,
+      locales,
     })
 
     const foreignReferenceMap = buildForeignReferenceMap({
@@ -203,6 +205,7 @@ describe(`Process existing mutated nodes in warm build`, () => {
       assets: currentSyncData.assets,
       entryList,
       space,
+      locales,
     })
 
     const foreignReferenceMap = buildForeignReferenceMap({
@@ -296,6 +299,7 @@ describe(`Process contentful data (by id)`, () => {
       assets: currentSyncData.assets,
       entryList,
       space,
+      locales,
     })
     expect(resolvable).toMatchSnapshot()
   })
@@ -451,24 +455,30 @@ describe(`Gets field value based on current locale`, () => {
 describe(`Make IDs`, () => {
   it(`It doesn't postfix the spaceId and the id if its the default locale`, () => {
     expect(
-      makeId({
-        spaceId: `spaceId`,
-        id: `id`,
-        type: `type`,
-        defaultLocale: `en-US`,
-        currentLocale: `en-US`,
-      })
-    ).toBe(`spaceId___id___type`)
+      makeId(
+        { sys: { id: `spaceId` } },
+        {
+          sys: {
+            id: `id`,
+            type: `type`,
+          },
+        },
+        `en-US`
+      )
+    ).toBe(`spaceId___id___type___es-US`)
   })
   it(`It does postfix the spaceId and the id if its not the default locale`, () => {
     expect(
-      makeId({
-        spaceId: `spaceId`,
-        id: `id`,
-        type: `type`,
-        defaultLocale: `en-US`,
-        currentLocale: `en-GB`,
-      })
+      makeId(
+        { sys: { id: `spaceId` } },
+        {
+          sys: {
+            id: `id`,
+            type: `type`,
+          },
+        },
+        `en-GB`
+      )
     ).toBe(`spaceId___id___type___en-GB`)
   })
 })
