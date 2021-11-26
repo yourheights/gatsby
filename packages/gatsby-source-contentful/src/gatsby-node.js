@@ -3,6 +3,7 @@ import _ from "lodash"
 import origFetch from "node-fetch"
 import fetchRetry from "@vercel/fetch-retry"
 
+import { CascadedContext } from "./cascaded-context"
 import { maskText } from "./plugin-options"
 
 export { createSchemaCustomization } from "./create-schema-customization"
@@ -131,3 +132,81 @@ List of locales and their codes can be found in Contentful app -> Settings -> Lo
       plugins: Joi.array(),
     })
     .external(validateContentfulAccess)
+
+exports.pluginOptionsSchema = pluginOptionsSchema
+
+const localeState = new CascadedContext()
+
+exports.createSchemaCustomization = ({ actions }) => {
+  actions.createResolverContext({ localeState })
+  actions.createFieldExtension({
+    name: `contentfulLocalized`,
+    args: {
+      contentfulFieldId: {
+        type: `String!`,
+      },
+    },
+    extend(options) {
+      return {
+        args: {
+          locale: `String`,
+        },
+        resolve(source, args, context, info) {
+          console.log(
+            JSON.stringify(
+              { source, args, context: context.sourceContentful },
+              null,
+              2
+            )
+          )
+
+          let locale
+          if (args.locale) {
+            context.sourceContentful.localeState.set(info, args.locale)
+            locale = args.locale
+          } else {
+            locale = context.sourceContentful.localeState.get(info) || `en-US` // @todo we need default locale
+          }
+          const fieldValue = source.localeTest[options.contentfulFieldId] || {}
+          return fieldValue[locale] || null
+        },
+      }
+    },
+  })
+}
+
+exports.createResolvers = ({ createResolvers }) => {
+  const resolvers = {
+    Query: {
+      contentfulNumberLocalized: {
+        type: [`ContentfulNumber`],
+        args: {
+          locale: `String`, // "input PostsCountInput { min: Int, max: Int }",
+        },
+        resolve(source, args, context, info) {
+          let locale
+
+          if (args.locale) {
+            context.sourceContentful.localeState.set(info, args.locale)
+            locale = args.locale
+          } else {
+            locale = context.sourceContentful.localeState.get(info) || `en-US` // @todo where to get default locale from?
+          }
+
+          console.log({ locale })
+
+          return context.nodeModel.runQuery({
+            query: {
+              filter: {
+                sys: { locale: { eq: locale } },
+              },
+            },
+            type: `ContentfulNumber`,
+            firstOnly: false,
+          })
+        },
+      },
+    },
+  }
+  createResolvers(resolvers)
+}
