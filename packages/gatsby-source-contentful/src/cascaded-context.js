@@ -32,7 +32,7 @@ export class CascadedContext {
 
     the prefix is determined by walking the `info.path` property
     and concatenating it by `:`
-    
+
     By finding the longest matching prefix for a given other path,
     we can determine the current state of the variable for that part of the cascade
   */
@@ -40,19 +40,31 @@ export class CascadedContext {
 
   constructor() {}
   set(info, value) {
+    // console.log("set locale context", { info, value })
     const path = getPath(info.path)
     this.cascadeMap.set(path, value)
   }
   get(info) {
+    if (!info.path) {
+      return `en-US` // @todo make real this.defaultValue
+    }
     const path = getPath(info.path)
     const cascadeKeys = [...this.cascadeMap.keys()]
     const lastCascade = findLongestPrefix(path, cascadeKeys)
+
+    console.log(`gät locale context`, { info, path, cascadeKeys, lastCascade })
+
     if (lastCascade) {
       // Since we pulled this out of the cascade keys,
       // there is always a T for this key
+      console.log(
+        `found this active locale from context:`,
+        this.cascadeMap.get(lastCascade)
+      )
       return this.cascadeMap.get(lastCascade)
     } else {
-      return this.defaultValue
+      console.log(`fallback to default locale`)
+      return `en-US` // @todo make real this.defaultValue
     }
   }
   has(value) {

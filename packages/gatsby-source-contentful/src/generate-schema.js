@@ -206,7 +206,15 @@ export function generateSchema({
           ? getLinkFieldType(field.items.linkType, field, schema, createTypes)
           : translateFieldType(field.items, schema, createTypes)
 
-      fieldType = { ...fieldData, type: `[${fieldData.type}]` }
+      fieldType = {
+        ...fieldData,
+        type: `[${fieldData.type}]`,
+        extensions: {
+          contentfulLocalized: {
+            contentfulFieldId: field.id,
+          },
+        },
+      }
     } else if (field.type === `Link`) {
       // Contentful Link (reference) field types
       fieldType = getLinkFieldType(field.linkType, field, schema, createTypes)
